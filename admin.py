@@ -3,6 +3,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 import pandas as pd
 from datetime import datetime, date
+import pytz
 
 # ==========================================
 # 設定
@@ -10,6 +11,7 @@ from datetime import datetime, date
 SPREADSHEET_ID = "1ThtSEj2dnEYSKHIXerjcujo9-6rxmRXEYk2ijS80OlQ"
 COMPANY_NAME = "株式会社ハイビックス"
 ADMIN_PASSWORD = "3131"
+JST = pytz.timezone("Asia/Tokyo")
 
 # ==========================================
 # ページ設定
@@ -17,7 +19,7 @@ ADMIN_PASSWORD = "3131"
 st.set_page_config(
     page_title=f"{COMPANY_NAME} 管理画面",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_ebar="expanded"
 )
 
 # ==========================================
@@ -158,7 +160,7 @@ def main():
                 )
 
             with col2:
-                absence_date = st.date_input("日付", value=date.today())
+                absence_date = st.date_input("日付", value=datetime.now(JST).date())
                 note = st.text_area("備考", placeholder="例：発熱のため", height=100)
 
             submitted = st.form_submit_button("✅ 登録する", use_container_width=True)
@@ -169,7 +171,7 @@ def main():
                 else:
                     try:
                         sheet = get_sheet("欠勤連絡")
-                        now = datetime.now().strftime("%H:%M")
+                        now = datetime.now(JST).strftime("%H:%M")
                         date_str = absence_date.strftime("%Y/%m/%d")
                         sheet.append_row([
                             date_str,
@@ -189,7 +191,7 @@ def main():
         df = get_sheet_data("欠勤連絡")
 
         if not df.empty and "日付" in df.columns:
-            today = date.today().strftime("%Y/%m/%d")
+            today = datetime.now(JST).strftime("%Y/%m/%d")
             df["日付_正規化"] = df["日付"].apply(normalize_date)
             df_today = df[df["日付_正規化"] == today].copy()
             df_today.reset_index(drop=False, inplace=True)
@@ -220,8 +222,8 @@ def main():
             col1, col2 = st.columns(2)
 
             with col1:
-                visit_date = st.date_input("日付", value=date.today())
-                visit_time = st.time_input("来訪時刻", value=datetime.now().time())
+                visit_date = st.date_input("日付", value=datetime.now(JST).date())
+                visit_time = st.time_input("来訪時刻", value=datetime.now(JST).time())
                 company = st.text_input("会社名", placeholder="例：〇〇株式会社")
 
             with col2:
@@ -257,7 +259,7 @@ def main():
         df = get_sheet_data("来客情報")
 
         if not df.empty and "日付" in df.columns:
-            today = date.today().strftime("%Y/%m/%d")
+            today = datetime.now(JST).strftime("%Y/%m/%d")
             df["日付_正規化"] = df["日付"].apply(normalize_date)
             df_today = df[df["日付_正規化"] == today].copy()
             df_today.reset_index(drop=False, inplace=True)
@@ -292,9 +294,9 @@ def main():
             )
             col1, col2 = st.columns(2)
             with col1:
-                start_date = st.date_input("掲載開始日", value=date.today())
+                start_date = st.date_input("掲載開始日", value=datetime.now(JST).date())
             with col2:
-                end_date = st.date_input("掲載終了日", value=date.today())
+                end_date = st.date_input("掲載終了日", value=datetime.now(JST).date())
 
             submitted = st.form_submit_button("✅ 登録する", use_container_width=True)
 
