@@ -143,12 +143,11 @@ def get_gspread_client():
         "https://spreadsheets.google.com/feeds",
         "https://www.googleapis.com/auth/drive"
     ]
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    json_path = os.path.join(base_dir, "service_account.json")
-    creds = Credentials.from_service_account_file(
-        json_path,
+    creds = Credentials.from_service_account_info(
+        st.secrets["gcp_service_account"],
         scopes=scope
     )
+
     return gspread.Client(auth=creds)
 
 
