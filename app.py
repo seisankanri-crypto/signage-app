@@ -6,6 +6,7 @@ from datetime import datetime, date
 import requests
 import time
 import os
+import pytz
 
 # ==========================================
 # 設定
@@ -14,6 +15,7 @@ SPREADSHEET_ID = "1ThtSEj2dnEYSKHIXerjcujo9-6rxmRXEYk2ijS80OlQ"
 COMPANY_NAME = "株式会社ハイビックス"
 SLIDE_INTERVAL = 10  # スライド切替秒数
 WEATHER_CITY = "Mizuho, Gifu, JP"  # 天気取得用
+JST = pytz.timezone("Asia/Tokyo")
 
 # ==========================================
 # ページ設定
@@ -119,7 +121,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 日付正規化関数 ← 追加
+# 日付正規化関数
 # ==========================================
 def normalize_date(date_str):
     """日付を正規化する（2024/1/15 → 2024/01/15）"""
@@ -147,7 +149,6 @@ def get_gspread_client():
         st.secrets["gcp_service_account"],
         scopes=scope
     )
-
     return gspread.Client(auth=creds)
 
 
@@ -221,7 +222,7 @@ def get_weather():
 # ヘッダー表示
 # ==========================================
 def show_header():
-    now = datetime.now()
+    now = datetime.now(JST)
     date_str = now.strftime("%Y年%m月%d日（" + "月火水木金土日"[now.weekday()] + "）")
     time_str = now.strftime("%H:%M")
 
@@ -248,8 +249,7 @@ def show_absence():
         """, unsafe_allow_html=True)
         return
 
-    # 今日の日付でフィルタ ← 正規化して比較
-    today = date.today().strftime("%Y/%m/%d")
+    today = datetime.now(JST).strftime("%Y/%m/%d")
     if "日付" in df.columns:
         df["日付_正規化"] = df["日付"].apply(normalize_date)
         df = df[df["日付_正規化"] == today]
@@ -288,8 +288,7 @@ def show_visitors():
         """, unsafe_allow_html=True)
         return
 
-    # 今日の日付でフィルタ ← 正規化して比較
-    today = date.today().strftime("%Y/%m/%d")
+    today = datetime.now(JST).strftime("%Y/%m/%d")
     if "日付" in df.columns:
         df["日付_正規化"] = df["日付"].apply(normalize_date)
         df = df[df["日付_正規化"] == today]
@@ -328,8 +327,7 @@ def show_notices():
         """, unsafe_allow_html=True)
         return
 
-    # 掲載期間でフィルタ ← 正規化して比較
-    today = date.today().strftime("%Y/%m/%d")
+    today = datetime.now(JST).strftime("%Y/%m/%d")
     if "掲載開始日" in df.columns and "掲載終了日" in df.columns:
         df["掲載開始日_正規化"] = df["掲載開始日"].apply(normalize_date)
         df["掲載終了日_正規化"] = df["掲載終了日"].apply(normalize_date)
@@ -396,21 +394,18 @@ def show_weather():
             99: ("⛈️", "激しい雷雨"),
         }
 
-        # 曜日リスト
         youbi = ["月", "火", "水", "木", "金", "土", "日"]
 
-        # 7日分のカードを横並びで表示
         cols = st.columns(7)
         for i, col in enumerate(cols):
             d = datetime.strptime(dates[i], "%Y-%m-%d")
             youbi_str = youbi[d.weekday()]
-            date_str = d.strftime(f"%m/%d\n（{youbi_str}）")
             icon, desc = weather_map.get(weathercodes[i], ("🌡️", "不明"))
             temp_max = temp_maxs[i]
             temp_min = temp_mins[i]
 
-            # 今日は強調表示
-            is_today = dates[i] == date.today().strftime("%Y-%m-%d")
+            today_str = datetime.now(JST).strftime("%Y-%m-%d")
+            is_today = dates[i] == today_str
             bg_color = "rgba(2, 136, 209, 0.5)" if is_today else "rgba(21, 101, 192, 0.2)"
             border = "2px solid #0288d1" if is_today else "1px solid #1565c0"
 
@@ -481,7 +476,7 @@ def main():
     st.markdown(f"""
         <div class="footer">
             {indicators}<br>
-            最終更新：{datetime.now().strftime("%H:%M:%S")}
+            最終更新：{datetime.now(JST).strftime("%H:%M:%S")}
         </div>
     """, unsafe_allow_html=True)
 
