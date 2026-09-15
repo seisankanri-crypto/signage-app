@@ -19,7 +19,7 @@ JST = pytz.timezone("Asia/Tokyo")
 st.set_page_config(
     page_title=f"{COMPANY_NAME} 管理画面",
     layout="wide",
-    initial_sidebar_ebar="expanded"
+    initial_sidebar_state="expanded"
 )
 
 # ==========================================
