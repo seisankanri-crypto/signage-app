@@ -17,7 +17,7 @@ def get_base64(file_path):
 
 # 画像読み込み
 bg_image = get_base64("syaoku.jpg")
-logo_image = get_base64("IMG_2171.png")
+logo_image = get_base64("IMG_2171.PNG")
 
 # CSS設定
 st.markdown(f"""
