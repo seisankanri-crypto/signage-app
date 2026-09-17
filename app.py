@@ -394,15 +394,15 @@ def show_weather():
                     color: white;
                     box-shadow: 0 4px 15px rgba(0, 100, 255, 0.3);
                 ">
-                    <div style="font-size:13px; color:#90caf9; font-weight:bold;">
+                    <div style="font-size:16px; color:#90caf9; font-weight:bold;">
                         {d.strftime("%m/%d")}<br>（{youbi_str}）
                     </div>
-                    <div style="font-size:36px; margin:6px 0;">{icon}</div>
-                    <div style="font-size:12px; color:#e0e0e0;">{desc}</div>
-                    <div style="font-size:16px; color:#ff7043; font-weight:bold; margin-top:6px;">
+                    <div style="font-size:48px; margin:8px 0;">{icon}</div>
+                    <div style="font-size:15px; color:#e0e0e0;">{desc}</div>
+                    <div style="font-size:20px; color:#ff7043; font-weight:bold; margin-top:8px;">
                         ▲ {temp_maxs[i]}°C
                     </div>
-                    <div style="font-size:16px; color:#42a5f5; font-weight:bold;">
+                    <div style="font-size:20px; color:#42a5f5; font-weight:bold;">
                         ▼ {temp_mins[i]}°C
                     </div>
                 </div>
