@@ -411,6 +411,63 @@ def show_weather():
         st.markdown('<div class="empty-message">📭 天気情報を取得できませんでした</div>', unsafe_allow_html=True)
 
 # ==========================================
+# スライド5：ニュース
+# ==========================================
+def show_news():
+    st.markdown('<div class="slide-title">📰 本日のニュース</div>', unsafe_allow_html=True)
+    try:
+        import xml.etree.ElementTree as ET
+        url = "https://www.nhk.or.jp/rss/news/cat0.xml"
+        response = requests.get(url, timeout=5)
+        response.encoding = "utf-8"
+        root = ET.fromstring(response.content)
+        
+        items = root.findall(".//item")[:8]  # 最大8件
+        
+        news_html = ""
+        for i, item in enumerate(items):
+            title = item.find("title").text or ""
+            pub_date = item.find("pubDate").text or ""
+            
+            # 日時を整形
+            try:
+                dt = datetime.strptime(pub_date, "%a, %d %b %Y %H:%M:%S %z")
+                dt_jst = dt.astimezone(JST)
+                time_str = dt_jst.strftime("%H:%M")
+            except:
+                time_str = ""
+
+            row_class = "rgba(21, 101, 192, 0.3)" if i % 2 == 0 else "rgba(2, 136, 209, 0.15)"
+
+            news_html += f"""
+                <div style="
+                    background: {row_class};
+                    border-left: 4px solid #0288d1;
+                    border-radius: 8px;
+                    padding: 12px 20px;
+                    margin: 6px 0;
+                    color: white;
+                    display: flex;
+                    align-items: center;
+                    gap: 16px;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+                ">
+                    <span style="
+                        color: #90caf9;
+                        font-size: 15px;
+                        font-weight: bold;
+                        min-width: 45px;
+                    ">{time_str}</span>
+                    <span style="font-size: 17px;">📌 {title}</span>
+                </div>
+            """
+        
+        st.markdown(news_html, unsafe_allow_html=True)
+
+    except Exception as e:
+        st.markdown('<div class="empty-message">📭 ニュースを取得できませんでした</div>', unsafe_allow_html=True)
+
+# ==========================================
 # メイン処理
 # ==========================================
 def main():
@@ -421,7 +478,7 @@ def main():
 
     now = time.time()
     if now - st.session_state.last_switch >= SLIDE_INTERVAL:
-        st.session_state.slide_index = (st.session_state.slide_index + 1) % 4
+        st.session_state.slide_index = (st.session_state.slide_index + 1) % 5
         st.session_state.last_switch = now
 
     show_header()
@@ -435,9 +492,12 @@ def main():
         show_notices()
     elif slide == 3:
         show_weather()
+    elif slide == 4:
+        show_news()
 
     indicators = ""
-    for i in range(4):
+    for i in range(5):
+
         if i == slide:
             indicators += "⬤ "
         else:
