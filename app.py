@@ -231,9 +231,60 @@ def show_absence():
     if df.empty:
         st.markdown('<div class="empty-message">📭 本日の連絡はありません</div>', unsafe_allow_html=True)
         return
+
     display_cols = ["氏名", "部署", "種別", "備考", "登録時刻"]
     df_display = df[[col for col in display_cols if col in df.columns]]
-    st.dataframe(df_display, use_container_width=True, hide_index=True, height=400)
+
+    # テーブルHTMLを生成
+    headers = "".join([f"<th>{col}</th>" for col in df_display.columns])
+    rows = ""
+    for i, row in df_display.iterrows():
+        cells = "".join([f"<td>{val}</td>" for val in row.values])
+        row_class = "row-even" if i % 2 == 0 else "row-odd"
+        rows += f'<tr class="{row_class}">{cells}</tr>'
+
+    st.markdown(f"""
+        <style>
+        .custom-table {{
+            width: 100%;
+            border-collapse: collapse;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+            font-size: 16px;
+        }}
+        .custom-table th {{
+            background: linear-gradient(135deg, rgba(21,101,192,0.9), rgba(2,136,209,0.9));
+            color: white;
+            padding: 14px 16px;
+            text-align: center;
+            font-weight: bold;
+            letter-spacing: 1px;
+            border: none;
+        }}
+        .custom-table td {{
+            padding: 12px 16px;
+            text-align: center;
+            color: white;
+            border: none;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }}
+        .row-even {{
+            background: rgba(21, 101, 192, 0.3);
+        }}
+        .row-odd {{
+            background: rgba(2, 136, 209, 0.15);
+        }}
+        .custom-table tr:hover td {{
+            background: rgba(2, 136, 209, 0.5);
+        }}
+        </style>
+
+        <table class="custom-table">
+            <thead><tr>{headers}</tr></thead>
+            <tbody>{rows}</tbody>
+        </table>
+    """, unsafe_allow_html=True)
 
 # ==========================================
 # スライド2：来客情報
@@ -251,9 +302,24 @@ def show_visitors():
     if df.empty:
         st.markdown('<div class="empty-message">📭 本日の連絡はありません</div>', unsafe_allow_html=True)
         return
+
     display_cols = ["来訪時刻", "会社名", "訪問者名", "人数", "担当者"]
     df_display = df[[col for col in display_cols if col in df.columns]]
-    st.dataframe(df_display, use_container_width=True, hide_index=True, height=400)
+
+    # テーブルHTMLを生成
+    headers = "".join([f"<th>{col}</th>" for col in df_display.columns])
+    rows = ""
+    for i, row in df_display.iterrows():
+        cells = "".join([f"<td>{val}</td>" for val in row.values])
+        row_class = "row-even" if i % 2 == 0 else "row-odd"
+        rows += f'<tr class="{row_class}">{cells}</tr>'
+
+    st.markdown(f"""
+        <table class="custom-table">
+            <thead><tr>{headers}</tr></thead>
+            <tbody>{rows}</tbody>
+        </table>
+    """, unsafe_allow_html=True)
 
 # ==========================================
 # スライド3：お知らせ
