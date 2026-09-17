@@ -68,14 +68,15 @@ st.markdown(f"""
             padding: 10px 20px;
         }}
 
-        /* ロゴ固定表示（右下） */
+        /* ロゴ固定表示（左下） */
         .logo-fixed {{
             position: fixed;
-            bottom: 20px;
-            right: 20px;
-            width: 220px;
+            bottom: 30px;
+            left: 20px;
+            width: 280px;
             z-index: 9999;
         }}
+
 
         .company-header {{
             background: linear-gradient(135deg, rgba(26,35,126,0.85), rgba(21,101,192,0.85), rgba(2,136,209,0.85));
