@@ -1,4 +1,5 @@
 import streamlit as st
+from streamlit_autorefresh import st_autorefresh
 import gspread
 from google.oauth2.service_account import Credentials
 import pandas as pd
@@ -26,6 +27,12 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed"
 )
+
+# ==========================================
+# 自動更新（チラつき防止）
+# ✅ 3000ms=3秒ごとに差分だけ更新
+# ==========================================
+st_autorefresh(interval=3000, key="autorefresh")
 
 # ==========================================
 # 画像をbase64に変換
@@ -76,7 +83,6 @@ st.markdown(f"""
             width: 280px;
             z-index: 9999;
         }}
-
 
         .company-header {{
             background: linear-gradient(135deg, rgba(26,35,126,0.85), rgba(21,101,192,0.85), rgba(2,136,209,0.85));
@@ -153,6 +159,41 @@ st.markdown(f"""
             font-size: 14px !important;
             border-radius: 12px !important;
         }}
+
+        /* テーブル共通スタイル */
+        .custom-table {{
+            width: 100%;
+            border-collapse: collapse;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+            font-size: 16px;
+        }}
+        .custom-table th {{
+            background: linear-gradient(135deg, rgba(21,101,192,0.9), rgba(2,136,209,0.9));
+            color: white;
+            padding: 14px 16px;
+            text-align: center;
+            font-weight: bold;
+            letter-spacing: 1px;
+            border: none;
+        }}
+        .custom-table td {{
+            padding: 12px 16px;
+            text-align: center;
+            color: white;
+            border: none;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }}
+        .row-even {{
+            background: rgba(21, 101, 192, 0.3);
+        }}
+        .row-odd {{
+            background: rgba(2, 136, 209, 0.15);
+        }}
+        .custom-table tr:hover td {{
+            background: rgba(2, 136, 209, 0.5);
+        }}
     </style>
 
     <!-- ロゴ固定表示 -->
@@ -217,6 +258,8 @@ def show_header():
 
 # ==========================================
 # スライド1：欠勤者一覧
+# ✅ 備考・昼食は非表示
+# ✅ 開始時間・終了時間を表示
 # ==========================================
 def show_absence():
     st.markdown('<div class="slide-title">🏥 本日の欠勤・遅刻・早退者</div>', unsafe_allow_html=True)
@@ -232,10 +275,10 @@ def show_absence():
         st.markdown('<div class="empty-message">📭 本日の連絡はありません</div>', unsafe_allow_html=True)
         return
 
-    display_cols = ["氏名", "部署", "種別", "備考", "登録時刻"]
+    # ✅ 備考・昼食は表示しない　開始時間・終了時間を表示
+    display_cols = ["氏名", "部署", "種別", "開始時間", "終了時間", "登録時刻"]
     df_display = df[[col for col in display_cols if col in df.columns]]
 
-    # テーブルHTMLを生成
     headers = "".join([f"<th>{col}</th>" for col in df_display.columns])
     rows = ""
     for i, row in df_display.iterrows():
@@ -244,42 +287,6 @@ def show_absence():
         rows += f'<tr class="{row_class}">{cells}</tr>'
 
     st.markdown(f"""
-        <style>
-        .custom-table {{
-            width: 100%;
-            border-collapse: collapse;
-            border-radius: 12px;
-            overflow: hidden;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-            font-size: 16px;
-        }}
-        .custom-table th {{
-            background: linear-gradient(135deg, rgba(21,101,192,0.9), rgba(2,136,209,0.9));
-            color: white;
-            padding: 14px 16px;
-            text-align: center;
-            font-weight: bold;
-            letter-spacing: 1px;
-            border: none;
-        }}
-        .custom-table td {{
-            padding: 12px 16px;
-            text-align: center;
-            color: white;
-            border: none;
-            border-bottom: 1px solid rgba(255,255,255,0.1);
-        }}
-        .row-even {{
-            background: rgba(21, 101, 192, 0.3);
-        }}
-        .row-odd {{
-            background: rgba(2, 136, 209, 0.15);
-        }}
-        .custom-table tr:hover td {{
-            background: rgba(2, 136, 209, 0.5);
-        }}
-        </style>
-
         <table class="custom-table">
             <thead><tr>{headers}</tr></thead>
             <tbody>{rows}</tbody>
@@ -306,7 +313,6 @@ def show_visitors():
     display_cols = ["来訪時刻", "会社名", "訪問者名", "人数", "担当者"]
     df_display = df[[col for col in display_cols if col in df.columns]]
 
-    # テーブルHTMLを生成
     headers = "".join([f"<th>{col}</th>" for col in df_display.columns])
     rows = ""
     for i, row in df_display.iterrows():
@@ -421,15 +427,14 @@ def show_news():
         response = requests.get(url, timeout=5)
         response.encoding = "utf-8"
         root = ET.fromstring(response.content)
-        
-        items = root.findall(".//item")[:8]  # 最大8件
-        
+
+        items = root.findall(".//item")[:8]
+
         news_html = ""
         for i, item in enumerate(items):
             title = item.find("title").text or ""
             pub_date = item.find("pubDate").text or ""
-            
-            # 日時を整形
+
             try:
                 dt = datetime.strptime(pub_date, "%a, %d %b %Y %H:%M:%S %z")
                 dt_jst = dt.astimezone(JST)
@@ -461,7 +466,7 @@ def show_news():
                     <span style="font-size: 17px;">📌 {title}</span>
                 </div>
             """
-        
+
         st.markdown(news_html, unsafe_allow_html=True)
 
     except Exception as e:
@@ -476,6 +481,7 @@ def main():
     if "last_switch" not in st.session_state:
         st.session_state.last_switch = time.time()
 
+    # ✅ スライド切り替えのタイミング管理
     now = time.time()
     if now - st.session_state.last_switch >= SLIDE_INTERVAL:
         st.session_state.slide_index = (st.session_state.slide_index + 1) % 5
@@ -497,7 +503,6 @@ def main():
 
     indicators = ""
     for i in range(5):
-
         if i == slide:
             indicators += "⬤ "
         else:
@@ -509,9 +514,6 @@ def main():
             最終更新：{datetime.now(JST).strftime("%H:%M:%S")}
         </div>
     """, unsafe_allow_html=True)
-
-    time.sleep(3)
-    st.rerun()
 
 if __name__ == "__main__":
     main()
