@@ -264,14 +264,14 @@ def show_absence():
     TIME_FIXED_KINDS = ["有給休暇", "振替休暇", "欠勤"]
     def fill_time(row):
         if row.get("種別", "") in TIME_FIXED_KINDS:
-            row["開始時間"] = "8:30"
-            row["終了時間"] = "17:30"
+            row["開始時刻"] = "8:30"
+            row["終了時刻"] = "17:30"
         return row
 
     df = df.apply(fill_time, axis=1)
 
     # ✅ 備考・昼食は表示しない
-    display_cols = ["氏名", "部署", "種別", "開始時間", "終了時間", "登録時刻"]
+    display_cols = ["氏名", "部署", "種別", "開始時刻", "終了時刻", "登録時刻"]
     df_display = df[[col for col in display_cols if col in df.columns]]
 
     headers = "".join([f"<th>{col}</th>" for col in df_display.columns])
