@@ -161,35 +161,92 @@ def main():
                 department = st.text_input("部署", placeholder="例：製造部")
                 absence_type = st.selectbox(
                     "種別",
-                    ["欠勤", "遅刻", "早退", "半休"]
+                    ["欠勤", "有給休暇", "振替休暇", "遅刻", "早退", "半休"]
                 )
 
             with col2:
-                absence_date = st.date_input("日付", value=datetime.now(JST).date())
-                note = st.text_area("備考", placeholder="例：発熱のため", height=100)
+                # 複数日対応（欠勤・有給・振替）
+                if absence_type in ["欠勤", "有給休暇", "振替休暇"]:
+                    start_date = st.date_input("開始日", value=datetime.now(JST).date())
+                    end_date = st.date_input("終了日", value=datetime.now(JST).date())
+                    start_time = None
+                    end_time = None
+
+                # 遅刻は終了時刻のみ
+                elif absence_type == "遅刻":
+                    start_date = st.date_input("日付", value=datetime.now(JST).date())
+                    end_date = start_date
+                    st.markdown("**終了時刻（出勤時刻）**")
+                    end_time = st.time_input("終了時刻", value=datetime.strptime("10:00", "%H:%M").time())
+                    start_time = datetime.strptime("08:30", "%H:%M").time()
+
+                # 早退は開始時刻のみ
+                elif absence_type == "早退":
+                    start_date = st.date_input("日付", value=datetime.now(JST).date())
+                    end_date = start_date
+                    st.markdown("**開始時刻（早退時刻）**")
+                    start_time = st.time_input("開始時刻", value=datetime.strptime("15:00", "%H:%M").time())
+                    end_time = datetime.strptime("17:30", "%H:%M").time()
+
+                # 半休は開始・終了時刻両方
+                elif absence_type == "半休":
+                    start_date = st.date_input("日付", value=datetime.now(JST).date())
+                    end_date = start_date
+                    st.markdown("**開始時刻**")
+                    start_time = st.time_input("開始時刻", value=datetime.strptime("08:30", "%H:%M").time())
+                    st.markdown("**終了時刻**")
+                    end_time = st.time_input("終了時刻", value=datetime.strptime("12:00", "%H:%M").time())
+
+                note = st.text_area("備考", placeholder="例：発熱のため", height=80)
 
             submitted = st.form_submit_button("✅ 登録する", use_container_width=True)
 
             if submitted:
                 if not name or not department:
                     st.error("氏名と部署を入力してください")
+                elif start_date > end_date:
+                    st.error("終了日は開始日以降にしてください")
                 else:
                     try:
                         sheet = get_sheet("欠勤連絡")
-                        now = datetime.now(JST).strftime("%H:%M")
-                        date_str = absence_date.strftime("%Y/%m/%d")
-                        sheet.append_row([
-                            date_str,
-                            name,
-                            department,
-                            absence_type,
-                            note,
-                            now
-                        ])
-                        st.success(f"✅ {name}さんの{absence_type}を登録しました！")
+                        now_str = datetime.now(JST).strftime("%H:%M")
+
+                        # 日付リスト作成（複数日対応）
+                        from datetime import timedelta
+                        date_list = []
+                        current = start_date
+                        while current <= end_date:
+                            date_list.append(current)
+                            current += timedelta(days=1)
+
+                        # 時刻設定
+                        if absence_type in ["欠勤", "有給休暇", "振替休暇"]:
+                            start_time_str = "8:30"
+                            end_time_str = "17:30"
+                        else:
+                            start_time_str = start_time.strftime("%H:%M")
+                            end_time_str = end_time.strftime("%H:%M")
+
+                        # 1日ずつ登録
+                        for d in date_list:
+                            date_str = d.strftime("%Y/%m/%d")
+                            sheet.append_row([
+                                date_str,
+                                name,
+                                department,
+                                absence_type,
+                                start_time_str,
+                                end_time_str,
+                                note,
+                                now_str
+                            ])
+
+                        days = len(date_list)
+                        st.success(f"✅ {name}さんの{absence_type}を{days}日分登録しました！")
                         st.cache_resource.clear()
                     except Exception as e:
                         st.error(f"登録エラー: {e}")
+
 
         # 登録済みデータ表示・削除
         st.subheader("📋 本日の登録済みデータ")
