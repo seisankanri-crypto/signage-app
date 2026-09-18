@@ -34,8 +34,9 @@ st.set_page_config(
 st_autorefresh(interval=3000, key="autorefresh")
 
 # ==========================================
-# 画像をbase64に変換
+# 画像をbase64に変換 ✅ キャッシュして1回だけ読み込む
 # ==========================================
+@st.cache_resource
 def get_base64(file_path):
     with open(file_path, "rb") as f:
         return base64.b64encode(f.read()).decode()
