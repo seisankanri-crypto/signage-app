@@ -294,7 +294,7 @@ def show_absence():
 # ==========================================
 def show_visitors():
     st.markdown('<div class="slide-title">🏭 本日の工場見学へようこそ！</div>', unsafe_allow_html=True)
-    st.markdown('<div style="text-align:center; color:#90caf9; font-size:20px; margin-bottom:10px;">😊 本日もご来場いただきありがとうございます</div>', unsafe_allow_html=True)
+    st.markdown('<div style="text-align:center; color:#90caf9; font-size:26px; margin-bottom:10px; font-weight:bold; text-shadow: 0 2px 8px rgba(0,0,0,0.5);">😊 本日もご来場いただきありがとうございます</div>', unsafe_allow_html=True)
     df = get_sheet_data("来客情報")
     if df.empty:
         st.markdown('<div class="empty-message">どうぞごゆっくりご見学ください 🙏</div>', unsafe_allow_html=True)
@@ -323,9 +323,10 @@ def show_visitors():
             <thead><tr>{headers}</tr></thead>
             <tbody>{rows}</tbody>
         </table>
-        <div style="text-align:center; color:#90caf9; font-size:20px; margin-top:16px;">
+        <div style="text-align:center; color:#90caf9; font-size:26px; margin-top:16px; font-weight:bold; text-shadow: 0 2px 8px rgba(0,0,0,0.5);">
             どうぞごゆっくりご見学ください 🙏
         </div>
+
     """, unsafe_allow_html=True)
 
 
