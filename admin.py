@@ -161,7 +161,7 @@ def main():
                 department = st.text_input("部署", placeholder="例：製造部")
                 absence_type = st.selectbox(
                     "種別",
-                    ["欠勤", "有給休暇", "振替休暇", "遅刻", "早退", "半休"]
+                    ["欠勤", "有給休暇", "振替休暇", "遅刻", "早退", "私用外出"]
                 )
 
             with col2:
@@ -172,32 +172,25 @@ def main():
                     start_time = None
                     end_time = None
 
-                # 遅刻は終了時刻のみ
-                elif absence_type == "遅刻":
-                    start_date = st.date_input("日付", value=datetime.now(JST).date())
-                    end_date = start_date
-                    st.markdown("**終了時刻（出勤時刻）**")
-                    end_time = st.time_input("終了時刻", value=datetime.strptime("10:00", "%H:%M").time())
-                    start_time = datetime.strptime("08:30", "%H:%M").time()
-
-                # 早退は開始時刻のみ
-                elif absence_type == "早退":
-                    start_date = st.date_input("日付", value=datetime.now(JST).date())
-                    end_date = start_date
-                    st.markdown("**開始時刻（早退時刻）**")
-                    start_time = st.time_input("開始時刻", value=datetime.strptime("15:00", "%H:%M").time())
-                    end_time = datetime.strptime("17:30", "%H:%M").time()
-
-                # 半休は開始・終了時刻両方
-                elif absence_type == "半休":
+                # 遅刻・早退・私用外出は開始・終了時刻両方入力
+                else:
                     start_date = st.date_input("日付", value=datetime.now(JST).date())
                     end_date = start_date
                     st.markdown("**開始時刻**")
-                    start_time = st.time_input("開始時刻", value=datetime.strptime("08:30", "%H:%M").time())
+                    start_time = st.time_input(
+                        "開始時刻",
+                        value=datetime.strptime("08:30", "%H:%M").time(),
+                        key="start_time"
+                    )
                     st.markdown("**終了時刻**")
-                    end_time = st.time_input("終了時刻", value=datetime.strptime("12:00", "%H:%M").time())
+                    end_time = st.time_input(
+                        "終了時刻",
+                        value=datetime.strptime("17:30", "%H:%M").time(),
+                        key="end_time"
+                    )
 
                 note = st.text_area("備考", placeholder="例：発熱のため", height=80)
+                lunch = st.selectbox("昼食", ["あり", "なし"])
 
             submitted = st.form_submit_button("✅ 登録する", use_container_width=True)
 
@@ -231,14 +224,15 @@ def main():
                         for d in date_list:
                             date_str = d.strftime("%Y/%m/%d")
                             sheet.append_row([
-                                date_str,
-                                name,
-                                department,
-                                absence_type,
-                                start_time_str,
-                                end_time_str,
-                                note,
-                                now_str
+                                date_str,        # 日付
+                                name,            # 氏名
+                                department,      # 部署
+                                absence_type,    # 種別
+                                start_time_str,  # 開始時刻
+                                end_time_str,    # 終了時刻
+                                note,            # 備考
+                                lunch,           # 昼食
+                                now_str          # 登録時刻
                             ])
 
                         days = len(date_list)
@@ -246,6 +240,40 @@ def main():
                         st.cache_resource.clear()
                     except Exception as e:
                         st.error(f"登録エラー: {e}")
+
+        # 登録済みデータ表示・削除
+        st.subheader("📋 本日の登録済みデータ")
+        df = get_sheet_data("欠勤連絡")
+
+        if not df.empty and "日付" in df.columns:
+            today = datetime.now(JST).strftime("%Y/%m/%d")
+            df["日付_正規化"] = df["日付"].apply(normalize_date)
+            df_today = df[df["日付_正規化"] == today].copy()
+            df_today.reset_index(drop=False, inplace=True)
+
+            if not df_today.empty:
+                for _, row in df_today.iterrows():
+                    col1, col2 = st.columns([4, 1])
+                    with col1:
+                        st.info(
+                            f"👤 {row.get('氏名','')} / "
+                            f"{row.get('部署','')} / "
+                            f"{row.get('種別','')} / "
+                            f"{row.get('開始時刻','')}〜"
+                            f"{row.get('終了時刻','')} / "
+                            f"{row.get('備考','')}"
+                        )
+                    with col2:
+                        if st.button("🗑️ 削除", key=f"absence_{row['index']}"):
+                            if delete_row("欠勤連絡", row["index"]):
+                                st.success("削除しました！")
+                                st.cache_resource.clear()
+                                st.rerun()
+            else:
+                st.info("本日の登録はありません")
+        else:
+            st.info("本日の登録はありません")
+
 
 
         # 登録済みデータ表示・削除
