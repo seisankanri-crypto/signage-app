@@ -153,40 +153,40 @@ def main():
     if menu == "🏥 欠勤登録":
         st.header("🏥 欠勤・遅刻・早退 登録")
 
+        # ✅ 種別をフォームの外に出す
+        absence_type = st.selectbox(
+            "種別",
+            ["欠勤", "有給休暇", "振替休暇", "遅刻", "早退", "私用外出"]
+        )
+
         with st.form("absence_form"):
             col1, col2 = st.columns(2)
 
             with col1:
                 name = st.text_input("氏名", placeholder="例：山田 太郎")
                 department = st.text_input("部署", placeholder="例：製造部")
-                absence_type = st.selectbox(
-                    "種別",
-                    ["欠勤", "有給休暇", "振替休暇", "遅刻", "早退", "私用外出"]
-                )
 
             with col2:
-                # 複数日対応（欠勤・有給・振替）
+                # 欠勤・有給・振替 → 開始日〜終了日
                 if absence_type in ["欠勤", "有給休暇", "振替休暇"]:
                     start_date = st.date_input("開始日", value=datetime.now(JST).date())
                     end_date = st.date_input("終了日", value=datetime.now(JST).date())
                     start_time = None
                     end_time = None
 
-                # 遅刻・早退・私用外出は開始・終了時刻両方入力
+                # 遅刻・早退・私用外出 → 開始・終了時刻両方
                 else:
                     start_date = st.date_input("日付", value=datetime.now(JST).date())
                     end_date = start_date
                     st.markdown("**開始時刻**")
                     start_time = st.time_input(
                         "開始時刻",
-                        value=datetime.strptime("08:30", "%H:%M").time(),
-                        key="start_time"
+                        value=datetime.strptime("08:30", "%H:%M").time()
                     )
                     st.markdown("**終了時刻**")
                     end_time = st.time_input(
                         "終了時刻",
-                        value=datetime.strptime("17:30", "%H:%M").time(),
-                        key="end_time"
+                        value=datetime.strptime("17:30", "%H:%M").time()
                     )
 
                 note = st.text_area("備考", placeholder="例：発熱のため", height=80)
@@ -197,14 +197,14 @@ def main():
             if submitted:
                 if not name or not department:
                     st.error("氏名と部署を入力してください")
-                elif start_date > end_date:
+                elif absence_type in ["欠勤", "有給休暇", "振替休暇"] and start_date > end_date:
                     st.error("終了日は開始日以降にしてください")
                 else:
                     try:
                         sheet = get_sheet("欠勤連絡")
                         now_str = datetime.now(JST).strftime("%H:%M")
 
-                        # 日付リスト作成（複数日対応）
+                        # 日付リスト作成
                         from datetime import timedelta
                         date_list = []
                         current = start_date
@@ -273,8 +273,6 @@ def main():
                 st.info("本日の登録はありません")
         else:
             st.info("本日の登録はありません")
-
-
 
         # 登録済みデータ表示・削除
         st.subheader("📋 本日の登録済みデータ")
