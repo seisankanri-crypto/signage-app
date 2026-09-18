@@ -30,7 +30,6 @@ st.set_page_config(
 
 # ==========================================
 # 自動更新（チラつき防止）
-# ✅ 3000ms=3秒ごとに差分だけ更新
 # ==========================================
 st_autorefresh(interval=3000, key="autorefresh")
 
@@ -49,15 +48,12 @@ logo_image = get_base64("IMG_2185 (2).png")
 # ==========================================
 st.markdown(f"""
     <style>
-        /* 背景画像 */
         .stApp {{
             background-image: url("data:image/jpg;base64,{bg_image}");
             background-size: cover;
             background-position: center;
             background-repeat: no-repeat;
         }}
-
-        /* 背景に暗めのオーバーレイ（文字を見やすく） */
         .stApp::before {{
             content: "";
             position: fixed;
@@ -68,14 +64,11 @@ st.markdown(f"""
             background-color: rgba(0, 0, 0, 0.45);
             z-index: 0;
         }}
-
         section.main > div {{
             position: relative;
             z-index: 1;
             padding: 10px 20px;
         }}
-
-        /* ロゴ固定表示（左下） */
         .logo-fixed {{
             position: fixed;
             bottom: 30px;
@@ -83,7 +76,6 @@ st.markdown(f"""
             width: 280px;
             z-index: 9999;
         }}
-
         .company-header {{
             background: linear-gradient(135deg, rgba(26,35,126,0.85), rgba(21,101,192,0.85), rgba(2,136,209,0.85));
             padding: 10px;
@@ -153,14 +145,10 @@ st.markdown(f"""
             padding-top: 10px;
             padding-bottom: 10px;
         }}
-
-        /* データフレームの文字色 */
         .stDataFrame {{
             font-size: 14px !important;
             border-radius: 12px !important;
         }}
-
-        /* テーブル共通スタイル */
         .custom-table {{
             width: 100%;
             border-collapse: collapse;
@@ -248,7 +236,6 @@ def show_header():
     now = datetime.now(JST)
     date_str = now.strftime("%Y年%m月%d日（" + "月火水木金土日"[now.weekday()] + "）")
     time_str = now.strftime("%H:%M")
-
     st.markdown(f"""
         <div class="company-header">
             <div class="company-name">{COMPANY_NAME}</div>
@@ -258,8 +245,6 @@ def show_header():
 
 # ==========================================
 # スライド1：欠勤者一覧
-# ✅ 備考・昼食は非表示
-# ✅ 開始時間・終了時間を表示
 # ==========================================
 def show_absence():
     st.markdown('<div class="slide-title">🏥 本日の欠勤・遅刻・早退者</div>', unsafe_allow_html=True)
@@ -275,7 +260,17 @@ def show_absence():
         st.markdown('<div class="empty-message">📭 本日の連絡はありません</div>', unsafe_allow_html=True)
         return
 
-    # ✅ 備考・昼食は表示しない　開始時間・終了時間を表示
+    # ✅ 有給休暇・振替休暇・欠勤は固定時間を表示
+    TIME_FIXED_KINDS = ["有給休暇", "振替休暇", "欠勤"]
+    def fill_time(row):
+        if row.get("種別", "") in TIME_FIXED_KINDS:
+            row["開始時間"] = "8:30"
+            row["終了時間"] = "17:30"
+        return row
+
+    df = df.apply(fill_time, axis=1)
+
+    # ✅ 備考・昼食は表示しない
     display_cols = ["氏名", "部署", "種別", "開始時間", "終了時間", "登録時刻"]
     df_display = df[[col for col in display_cols if col in df.columns]]
 
@@ -481,7 +476,6 @@ def main():
     if "last_switch" not in st.session_state:
         st.session_state.last_switch = time.time()
 
-    # ✅ スライド切り替えのタイミング管理
     now = time.time()
     if now - st.session_state.last_switch >= SLIDE_INTERVAL:
         st.session_state.slide_index = (st.session_state.slide_index + 1) % 5
