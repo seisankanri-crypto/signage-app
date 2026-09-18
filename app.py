@@ -323,7 +323,11 @@ def show_visitors():
             <thead><tr>{headers}</tr></thead>
             <tbody>{rows}</tbody>
         </table>
+        <div style="text-align:center; color:#90caf9; font-size:20px; margin-top:16px;">
+            どうぞごゆっくりご見学ください 🙏
+        </div>
     """, unsafe_allow_html=True)
+
 
 # ==========================================
 # スライド3：お知らせ
