@@ -293,11 +293,13 @@ def show_absence():
 # スライド2：来客情報
 # ==========================================
 def show_visitors():
-    st.markdown('<div class="slide-title">🤝 本日の来客情報</div>', unsafe_allow_html=True)
+    st.markdown('<div class="slide-title">🏭 本日の工場見学へようこそ！</div>', unsafe_allow_html=True)
+    st.markdown('<div style="text-align:center; color:#90caf9; font-size:20px; margin-bottom:10px;">😊 本日もご来場いただきありがとうございます</div>', unsafe_allow_html=True)
     df = get_sheet_data("来客情報")
     if df.empty:
-        st.markdown('<div class="empty-message">📭 本日の連絡はありません</div>', unsafe_allow_html=True)
+        st.markdown('<div class="empty-message">どうぞごゆっくりご見学ください 🙏</div>', unsafe_allow_html=True)
         return
+
     today = datetime.now(JST).strftime("%Y/%m/%d")
     if "日付" in df.columns:
         df["日付_正規化"] = df["日付"].apply(normalize_date)
