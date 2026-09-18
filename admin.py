@@ -4,6 +4,10 @@ from google.oauth2.service_account import Credentials
 import pandas as pd
 from datetime import datetime, date
 import pytz
+from io import BytesIO
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
 
 # ==========================================
 # 設定
@@ -139,8 +143,9 @@ def main():
 
     menu = st.sidebar.selectbox(
         "メニューを選択",
-        ["🏥 欠勤登録", "🤝 来客登録", "📢 お知らせ登録"]
+        ["🏥 欠勤登録", "🤝 来客登録", "📢 お知らせ登録", "📊 勤怠一覧"]
     )
+
 
     # ==========================================
     # 欠勤登録
@@ -335,6 +340,137 @@ def main():
                             st.rerun()
         else:
             st.info("登録済みのお知らせはありません")
+
+    # ==========================================
+    # 勤怠一覧
+    # ==========================================
+    elif menu == "📊 勤怠一覧":
+        st.header("📊 勤怠一覧 Excelダウンロード")
+
+        # 期間指定
+        col1, col2 = st.columns(2)
+        with col1:
+            start_date = st.date_input(
+                "開始日",
+                value=datetime.now(JST).date().replace(day=1)
+            )
+        with col2:
+            end_date = st.date_input(
+                "終了日",
+                value=datetime.now(JST).date()
+            )
+
+        if start_date > end_date:
+            st.error("終了日は開始日以降にしてください")
+            return
+
+        # フィルター
+        df = get_sheet_data("欠勤連絡")
+
+        if df.empty:
+            st.info("データがありません")
+        else:
+            df["日付_正規化"] = df["日付"].apply(normalize_date)
+            start_str = start_date.strftime("%Y/%m/%d")
+            end_str = end_date.strftime("%Y/%m/%d")
+            df_filtered = df[
+                (df["日付_正規化"] >= start_str) &
+                (df["日付_正規化"] <= end_str)
+            ].copy()
+
+            # 部署フィルター
+            departments = ["すべて"] + sorted(df_filtered["部署"].dropna().unique().tolist())
+            selected_dept = st.selectbox("部署で絞り込み", departments)
+            if selected_dept != "すべて":
+                df_filtered = df_filtered[df_filtered["部署"] == selected_dept]
+
+            # 名前フィルター
+            names = ["すべて"] + sorted(df_filtered["氏名"].dropna().unique().tolist())
+            selected_name = st.selectbox("氏名で絞り込み", names)
+            if selected_name != "すべて":
+                df_filtered = df_filtered[df_filtered["氏名"] == selected_name]
+
+            # 表示列
+            display_cols = ["日付", "氏名", "部署", "種別", "開始時刻", "終了時刻", "備考", "登録時刻"]
+            df_display = df_filtered[[col for col in display_cols if col in df_filtered.columns]].copy()
+            df_display = df_display.sort_values("日付").reset_index(drop=True)
+
+            st.subheader(f"📋 該当件数：{len(df_display)}件")
+            st.dataframe(df_display, use_container_width=True)
+
+            # Excelファイル作成
+            def create_excel(df):
+                wb = openpyxl.Workbook()
+                ws = wb.active
+                ws.title = "勤怠一覧"
+
+                # タイトル
+                ws.merge_cells("A1:H1")
+                title_cell = ws["A1"]
+                title_cell.value = f"勤怠一覧　{start_date.strftime('%Y/%m/%d')} ～ {end_date.strftime('%Y/%m/%d')}"
+                title_cell.font = Font(bold=True, size=14, color="FFFFFF")
+                title_cell.fill = PatternFill("solid", fgColor="1565C0")
+                title_cell.alignment = Alignment(horizontal="center", vertical="center")
+                ws.row_dimensions[1].height = 30
+
+                # ヘッダー
+                headers = list(df.columns)
+                header_fill = PatternFill("solid", fgColor="0288D1")
+                thin = Side(style="thin", color="CCCCCC")
+                border = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+                for col_idx, header in enumerate(headers, 1):
+                    cell = ws.cell(row=2, column=col_idx, value=header)
+                    cell.font = Font(bold=True, color="FFFFFF", size=11)
+                    cell.fill = header_fill
+                    cell.alignment = Alignment(horizontal="center", vertical="center")
+                    cell.border = border
+                ws.row_dimensions[2].height = 22
+
+                # データ
+                for row_idx, row in df.iterrows():
+                    for col_idx, value in enumerate(row.values, 1):
+                        cell = ws.cell(row=row_idx + 3, column=col_idx, value=value)
+                        cell.alignment = Alignment(horizontal="center", vertical="center")
+                        cell.border = border
+                        if row_idx % 2 == 0:
+                            cell.fill = PatternFill("solid", fgColor="E3F2FD")
+                    ws.row_dimensions[row_idx + 3].height = 20
+
+                # 列幅
+                column_widths = {
+                    "日付": 14,
+                    "氏名": 14,
+                    "部署": 14,
+                    "種別": 12,
+                    "開始時刻": 12,
+                    "終了時刻": 12,
+                    "備考": 24,
+                    "登録時刻": 12,
+                }
+                for col_idx, header in enumerate(headers, 1):
+                    ws.column_dimensions[
+                        openpyxl.utils.get_column_letter(col_idx)
+                    ].width = column_widths.get(header, 14)
+
+                output = BytesIO()
+                wb.save(output)
+                output.seek(0)
+                return output
+
+            # ダウンロードボタン
+            if not df_display.empty:
+                excel_data = create_excel(df_display)
+                file_name = f"勤怠一覧_{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}.xlsx"
+                st.download_button(
+                    label="📥 Excelダウンロード",
+                    data=excel_data,
+                    file_name=file_name,
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
+            else:
+                st.info("該当するデータがありません")
 
 if __name__ == "__main__":
     main()
