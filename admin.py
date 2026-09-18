@@ -202,7 +202,8 @@ def main():
                 else:
                     try:
                         sheet = get_sheet("欠勤連絡")
-                        now_str = datetime.now(JST).strftime("%H:%M")
+                        now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M")
+
 
                         # 日付リスト作成
                         from datetime import timedelta
