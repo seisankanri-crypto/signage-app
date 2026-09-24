@@ -2,12 +2,11 @@ import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
 import pandas as pd
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import pytz
 from io import BytesIO
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-
 
 # ==========================================
 # 設定
@@ -44,7 +43,6 @@ st.markdown("""
 # 日付正規化関数
 # ==========================================
 def normalize_date(date_str):
-    """日付を正規化する（2024/1/15 → 2024/01/15）"""
     try:
         parts = str(date_str).split("/")
         if len(parts) == 3:
@@ -143,9 +141,8 @@ def main():
 
     menu = st.sidebar.selectbox(
         "メニューを選択",
-        ["🏥 欠勤登録", "🤝 来客登録", "📢 お知らせ登録", "📊 勤怠一覧"]
+        ["🏥 欠勤登録", "🤝 来客登録", "📢 お知らせ登録", "📊 勤怠一覧", "🆘 安否確認一覧"]
     )
-
 
     # ==========================================
     # 欠勤登録
@@ -153,7 +150,6 @@ def main():
     if menu == "🏥 欠勤登録":
         st.header("🏥 欠勤・遅刻・早退 登録")
 
-        # ✅ 種別をフォームの外に出す
         absence_type = st.selectbox(
             "種別",
             ["欠勤", "有給休暇", "振替休暇", "遅刻", "早退", "私用外出"]
@@ -167,14 +163,11 @@ def main():
                 department = st.text_input("部署", placeholder="例：製造部")
 
             with col2:
-                # 欠勤・有給・振替 → 開始日〜終了日
                 if absence_type in ["欠勤", "有給休暇", "振替休暇"]:
                     start_date = st.date_input("開始日", value=datetime.now(JST).date())
                     end_date = st.date_input("終了日", value=datetime.now(JST).date())
                     start_time = None
                     end_time = None
-
-                # 遅刻・早退・私用外出 → 開始・終了時刻両方
                 else:
                     start_date = st.date_input("日付", value=datetime.now(JST).date())
                     end_date = start_date
@@ -204,16 +197,12 @@ def main():
                         sheet = get_sheet("欠勤連絡")
                         now_str = datetime.now(JST).strftime("%Y/%m/%d %H:%M")
 
-
-                        # 日付リスト作成
-                        from datetime import timedelta
                         date_list = []
                         current = start_date
                         while current <= end_date:
                             date_list.append(current)
                             current += timedelta(days=1)
 
-                        # 時刻設定
                         if absence_type in ["欠勤", "有給休暇", "振替休暇"]:
                             start_time_str = "8:30"
                             end_time_str = "17:30"
@@ -221,19 +210,18 @@ def main():
                             start_time_str = start_time.strftime("%H:%M")
                             end_time_str = end_time.strftime("%H:%M")
 
-                        # 1日ずつ登録
                         for d in date_list:
                             date_str = d.strftime("%Y/%m/%d")
                             sheet.append_row([
-                                date_str,        # 日付
-                                name,            # 氏名
-                                department,      # 部署
-                                absence_type,    # 種別
-                                start_time_str,  # 開始時刻
-                                end_time_str,    # 終了時刻
-                                note,            # 備考
-                                lunch,           # 昼食
-                                now_str          # 登録時刻
+                                date_str,
+                                name,
+                                department,
+                                absence_type,
+                                start_time_str,
+                                end_time_str,
+                                note,
+                                lunch,
+                                now_str
                             ])
 
                         days = len(date_list)
@@ -242,7 +230,6 @@ def main():
                     except Exception as e:
                         st.error(f"登録エラー: {e}")
 
-        # 登録済みデータ表示・削除
         st.subheader("📋 本日の登録済みデータ")
         df = get_sheet_data("欠勤連絡")
 
@@ -264,32 +251,6 @@ def main():
                             f"{row.get('終了時刻','')} / "
                             f"{row.get('備考','')}"
                         )
-                    with col2:
-                        if st.button("🗑️ 削除", key=f"absence_{row['index']}"):
-                            if delete_row("欠勤連絡", row["index"]):
-                                st.success("削除しました！")
-                                st.cache_resource.clear()
-                                st.rerun()
-            else:
-                st.info("本日の登録はありません")
-        else:
-            st.info("本日の登録はありません")
-
-        # 登録済みデータ表示・削除
-        st.subheader("📋 本日の登録済みデータ")
-        df = get_sheet_data("欠勤連絡")
-
-        if not df.empty and "日付" in df.columns:
-            today = datetime.now(JST).strftime("%Y/%m/%d")
-            df["日付_正規化"] = df["日付"].apply(normalize_date)
-            df_today = df[df["日付_正規化"] == today].copy()
-            df_today.reset_index(drop=False, inplace=True)
-
-            if not df_today.empty:
-                for _, row in df_today.iterrows():
-                    col1, col2 = st.columns([4, 1])
-                    with col1:
-                        st.info(f"👤 {row.get('氏名','')} / {row.get('部署','')} / {row.get('種別','')} / {row.get('備考','')}")
                     with col2:
                         if st.button("🗑️ 削除", key=f"absence_{row['index']}"):
                             if delete_row("欠勤連絡", row["index"]):
@@ -343,7 +304,6 @@ def main():
                     except Exception as e:
                         st.error(f"登録エラー: {e}")
 
-        # 登録済みデータ表示・削除
         st.subheader("📋 本日の登録済みデータ")
         df = get_sheet_data("来客情報")
 
@@ -357,7 +317,12 @@ def main():
                 for _, row in df_today.iterrows():
                     col1, col2 = st.columns([4, 1])
                     with col1:
-                        st.info(f"🏢 {row.get('会社名','')} / {row.get('訪問者名','')} / {row.get('来訪時刻','')} / 担当：{row.get('担当者','')}")
+                        st.info(
+                            f"🏢 {row.get('会社名','')} / "
+                            f"{row.get('訪問者名','')} / "
+                            f"{row.get('来訪時刻','')} / "
+                            f"担当：{row.get('担当者','')}"
+                        )
                     with col2:
                         if st.button("🗑️ 削除", key=f"visitor_{row['index']}"):
                             if delete_row("来客情報", row["index"]):
@@ -405,7 +370,6 @@ def main():
                     except Exception as e:
                         st.error(f"登録エラー: {e}")
 
-        # 登録済みデータ表示・削除
         st.subheader("📋 登録済みお知らせ一覧")
         df = get_sheet_data("お知らせ")
 
@@ -415,7 +379,11 @@ def main():
             for _, row in df_notice.iterrows():
                 col1, col2 = st.columns([4, 1])
                 with col1:
-                    st.info(f"📌 {row.get('お知らせ内容','')} / {row.get('掲載開始日','')} ～ {row.get('掲載終了日','')}")
+                    st.info(
+                        f"📌 {row.get('お知らせ内容','')} / "
+                        f"{row.get('掲載開始日','')} ～ "
+                        f"{row.get('掲載終了日','')}"
+                    )
                 with col2:
                     if st.button("🗑️ 削除", key=f"notice_{row['index']}"):
                         if delete_row("お知らせ", row["index"]):
@@ -431,7 +399,6 @@ def main():
     elif menu == "📊 勤怠一覧":
         st.header("📊 勤怠一覧 Excelダウンロード")
 
-        # 期間指定
         col1, col2 = st.columns(2)
         with col1:
             start_date = st.date_input(
@@ -448,7 +415,6 @@ def main():
             st.error("終了日は開始日以降にしてください")
             return
 
-        # フィルター
         df = get_sheet_data("欠勤連絡")
 
         if df.empty:
@@ -462,19 +428,16 @@ def main():
                 (df["日付_正規化"] <= end_str)
             ].copy()
 
-            # 部署フィルター
             departments = ["すべて"] + sorted(df_filtered["部署"].dropna().unique().tolist())
             selected_dept = st.selectbox("部署で絞り込み", departments)
             if selected_dept != "すべて":
                 df_filtered = df_filtered[df_filtered["部署"] == selected_dept]
 
-            # 名前フィルター
             names = ["すべて"] + sorted(df_filtered["氏名"].dropna().unique().tolist())
             selected_name = st.selectbox("氏名で絞り込み", names)
             if selected_name != "すべて":
                 df_filtered = df_filtered[df_filtered["氏名"] == selected_name]
 
-            # 表示列
             display_cols = ["日付", "氏名", "部署", "種別", "開始時刻", "終了時刻", "備考", "登録時刻"]
             df_display = df_filtered[[col for col in display_cols if col in df_filtered.columns]].copy()
             df_display = df_display.sort_values("日付").reset_index(drop=True)
@@ -482,13 +445,11 @@ def main():
             st.subheader(f"📋 該当件数：{len(df_display)}件")
             st.dataframe(df_display, use_container_width=True)
 
-            # Excelファイル作成
             def create_excel(df):
                 wb = openpyxl.Workbook()
                 ws = wb.active
                 ws.title = "勤怠一覧"
 
-                # タイトル
                 ws.merge_cells("A1:H1")
                 title_cell = ws["A1"]
                 title_cell.value = f"勤怠一覧　{start_date.strftime('%Y/%m/%d')} ～ {end_date.strftime('%Y/%m/%d')}"
@@ -497,7 +458,6 @@ def main():
                 title_cell.alignment = Alignment(horizontal="center", vertical="center")
                 ws.row_dimensions[1].height = 30
 
-                # ヘッダー
                 headers = list(df.columns)
                 header_fill = PatternFill("solid", fgColor="0288D1")
                 thin = Side(style="thin", color="CCCCCC")
@@ -511,7 +471,6 @@ def main():
                     cell.border = border
                 ws.row_dimensions[2].height = 22
 
-                # データ
                 for row_idx, row in df.iterrows():
                     for col_idx, value in enumerate(row.values, 1):
                         cell = ws.cell(row=row_idx + 3, column=col_idx, value=value)
@@ -521,7 +480,6 @@ def main():
                             cell.fill = PatternFill("solid", fgColor="E3F2FD")
                     ws.row_dimensions[row_idx + 3].height = 20
 
-                # 列幅
                 column_widths = {
                     "日付": 14,
                     "氏名": 14,
@@ -542,7 +500,6 @@ def main():
                 output.seek(0)
                 return output
 
-            # ダウンロードボタン
             if not df_display.empty:
                 excel_data = create_excel(df_display)
                 file_name = f"勤怠一覧_{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}.xlsx"
@@ -555,6 +512,180 @@ def main():
                 )
             else:
                 st.info("該当するデータがありません")
+
+    # ==========================================
+    # 🆘 安否確認一覧 ← 新規追加！！
+    # ==========================================
+    elif menu == "🆘 安否確認一覧":
+        st.header("🆘 安否確認一覧")
+
+        # 日付フィルター
+        col1, col2 = st.columns(2)
+        with col1:
+            start_date = st.date_input(
+                "開始日",
+                value=datetime.now(JST).date()
+            )
+        with col2:
+            end_date = st.date_input(
+                "終了日",
+                value=datetime.now(JST).date()
+            )
+
+        if start_date > end_date:
+            st.error("終了日は開始日以降にしてください")
+            return
+
+        # データ取得
+        df = get_sheet_data("安否確認")
+
+        if df.empty:
+            st.info("安否確認のデータがありません")
+            return
+
+        # 列名確認（スプレッドシートの列順）
+        # 回答時刻 / 氏名 / user_id / ステータス
+
+        # 日付フィルター
+        if "回答時刻" in df.columns:
+            df["日付_正規化"] = df["回答時刻"].apply(
+                lambda x: normalize_date(str(x).split(" ")[0]) if x else ""
+            )
+            start_str = start_date.strftime("%Y/%m/%d")
+            end_str = end_date.strftime("%Y/%m/%d")
+            df_filtered = df[
+                (df["日付_正規化"] >= start_str) &
+                (df["日付_正規化"] <= end_str)
+            ].copy()
+        else:
+            df_filtered = df.copy()
+
+        # 件数表示
+        total = len(df_filtered)
+        safe = len(df_filtered[df_filtered.get("ステータス", pd.Series()) == "無事です"]) \
+            if "ステータス" in df_filtered.columns else total
+
+        # サマリーカード
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric(label="✅ 回答件数", value=f"{total} 件")
+        with col2:
+            st.metric(label="🟢 無事です", value=f"{safe} 件")
+
+        st.divider()
+
+        # 一覧表示
+        st.subheader(f"📋 回答一覧（{total}件）")
+
+        if not df_filtered.empty:
+            # 表示列を選択
+            display_cols = []
+            for col in ["回答時刻", "氏名", "ステータス"]:
+                if col in df_filtered.columns:
+                    display_cols.append(col)
+
+            df_display = df_filtered[display_cols].copy()
+            df_display = df_display.sort_values("回答時刻", ascending=False).reset_index(drop=True) \
+                if "回答時刻" in df_display.columns else df_display.reset_index(drop=True)
+
+            # カード表示
+            df_filtered_reset = df_filtered.copy()
+            df_filtered_reset.reset_index(drop=False, inplace=True)
+
+            for _, row in df_filtered_reset.iterrows():
+                col1, col2 = st.columns([4, 1])
+                with col1:
+                    status = row.get("ステータス", "無事です")
+                    icon = "✅" if status == "無事です" else "⚠️"
+                    st.success(
+                        f"{icon} {row.get('氏名', '')} / "
+                        f"{status} / "
+                        f"🕐 {row.get('回答時刻', '')}"
+                    )
+                with col2:
+                    if st.button("🗑️ 削除", key=f"anpi_{row['index']}"):
+                        if delete_row("安否確認", row["index"]):
+                            st.success("削除しました！")
+                            st.cache_resource.clear()
+                            st.rerun()
+
+            st.divider()
+
+            # Excelダウンロード
+            def create_anpi_excel(df):
+                wb = openpyxl.Workbook()
+                ws = wb.active
+                ws.title = "安否確認一覧"
+
+                # タイトル
+                ws.merge_cells("A1:C1")
+                title_cell = ws["A1"]
+                title_cell.value = (
+                    f"安否確認一覧　"
+                    f"{start_date.strftime('%Y/%m/%d')} ～ "
+                    f"{end_date.strftime('%Y/%m/%d')}"
+                )
+                title_cell.font = Font(bold=True, size=14, color="FFFFFF")
+                title_cell.fill = PatternFill("solid", fgColor="C62828")
+                title_cell.alignment = Alignment(horizontal="center", vertical="center")
+                ws.row_dimensions[1].height = 30
+
+                # ヘッダー
+                headers = list(df_display.columns)
+                header_fill = PatternFill("solid", fgColor="EF5350")
+                thin = Side(style="thin", color="CCCCCC")
+                border = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+                for col_idx, header in enumerate(headers, 1):
+                    cell = ws.cell(row=2, column=col_idx, value=header)
+                    cell.font = Font(bold=True, color="FFFFFF", size=11)
+                    cell.fill = header_fill
+                    cell.alignment = Alignment(horizontal="center", vertical="center")
+                    cell.border = border
+                ws.row_dimensions[2].height = 22
+
+                # データ
+                for row_idx, row in df_display.iterrows():
+                    for col_idx, value in enumerate(row.values, 1):
+                        cell = ws.cell(row=row_idx + 3, column=col_idx, value=value)
+                        cell.alignment = Alignment(horizontal="center", vertical="center")
+                        cell.border = border
+                        if row_idx % 2 == 0:
+                            cell.fill = PatternFill("solid", fgColor="FFEBEE")
+                    ws.row_dimensions[row_idx + 3].height = 20
+
+                # 列幅
+                column_widths = {
+                    "回答時刻": 20,
+                    "氏名": 16,
+                    "ステータス": 14,
+                }
+                for col_idx, header in enumerate(headers, 1):
+                    ws.column_dimensions[
+                        openpyxl.utils.get_column_letter(col_idx)
+                    ].width = column_widths.get(header, 16)
+
+                output = BytesIO()
+                wb.save(output)
+                output.seek(0)
+                return output
+
+            excel_data = create_anpi_excel(df_display)
+            file_name = (
+                f"安否確認一覧_"
+                f"{start_date.strftime('%Y%m%d')}_"
+                f"{end_date.strftime('%Y%m%d')}.xlsx"
+            )
+            st.download_button(
+                label="📥 Excelダウンロード",
+                data=excel_data,
+                file_name=file_name,
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+        else:
+            st.info("該当するデータがありません")
+
 
 if __name__ == "__main__":
     main()
