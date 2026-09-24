@@ -514,7 +514,7 @@ def main():
                 st.info("該当するデータがありません")
 
     # ==========================================
-    # 🆘 安否確認一覧 ← 新規追加！！
+    # 🆘 安否確認一覧
     # ==========================================
     elif menu == "🆘 安否確認一覧":
         st.header("🆘 安否確認一覧")
@@ -543,12 +543,10 @@ def main():
             st.info("安否確認のデータがありません")
             return
 
-        # 列名確認（スプレッドシートの列順）
-        # 回答時刻 / 氏名 / user_id / ステータス
-
         # 日付フィルター
-        if "回答時刻" in df.columns:
-            df["日付_正規化"] = df["回答時刻"].apply(
+        # 列名は「日時」！！
+        if "日時" in df.columns:
+            df["日付_正規化"] = df["日時"].apply(
                 lambda x: normalize_date(str(x).split(" ")[0]) if x else ""
             )
             start_str = start_date.strftime("%Y/%m/%d")
@@ -562,7 +560,7 @@ def main():
 
         # 件数表示
         total = len(df_filtered)
-        safe = len(df_filtered[df_filtered.get("ステータス", pd.Series()) == "無事です"]) \
+        safe = len(df_filtered[df_filtered["ステータス"] == "無事です"]) \
             if "ステータス" in df_filtered.columns else total
 
         # サマリーカード
@@ -579,14 +577,19 @@ def main():
 
         if not df_filtered.empty:
             # 表示列を選択
+            # 列名は「日時」「LINE表示名」「ステータス」！！
             display_cols = []
-            for col in ["回答時刻", "氏名", "ステータス"]:
+            for col in ["日時", "LINE表示名", "ステータス"]:
                 if col in df_filtered.columns:
                     display_cols.append(col)
 
             df_display = df_filtered[display_cols].copy()
-            df_display = df_display.sort_values("回答時刻", ascending=False).reset_index(drop=True) \
-                if "回答時刻" in df_display.columns else df_display.reset_index(drop=True)
+
+            # 日時で降順ソート
+            if "日時" in df_display.columns:
+                df_display = df_display.sort_values(
+                    "日時", ascending=False
+                ).reset_index(drop=True)
 
             # カード表示
             df_filtered_reset = df_filtered.copy()
@@ -597,10 +600,11 @@ def main():
                 with col1:
                     status = row.get("ステータス", "無事です")
                     icon = "✅" if status == "無事です" else "⚠️"
+                    # LINE表示名を使う！！
                     st.success(
-                        f"{icon} {row.get('氏名', '')} / "
+                        f"{icon} {row.get('LINE表示名', '')} / "
                         f"{status} / "
-                        f"🕐 {row.get('回答時刻', '')}"
+                        f"🕐 {row.get('日時', '')}"
                     )
                 with col2:
                     if st.button("🗑️ 削除", key=f"anpi_{row['index']}"):
@@ -631,7 +635,7 @@ def main():
                 ws.row_dimensions[1].height = 30
 
                 # ヘッダー
-                headers = list(df_display.columns)
+                headers = list(df.columns)
                 header_fill = PatternFill("solid", fgColor="EF5350")
                 thin = Side(style="thin", color="CCCCCC")
                 border = Border(left=thin, right=thin, top=thin, bottom=thin)
@@ -645,7 +649,7 @@ def main():
                 ws.row_dimensions[2].height = 22
 
                 # データ
-                for row_idx, row in df_display.iterrows():
+                for row_idx, row in df.iterrows():
                     for col_idx, value in enumerate(row.values, 1):
                         cell = ws.cell(row=row_idx + 3, column=col_idx, value=value)
                         cell.alignment = Alignment(horizontal="center", vertical="center")
@@ -656,8 +660,8 @@ def main():
 
                 # 列幅
                 column_widths = {
-                    "回答時刻": 20,
-                    "氏名": 16,
+                    "日時": 20,
+                    "LINE表示名": 16,
                     "ステータス": 14,
                 }
                 for col_idx, header in enumerate(headers, 1):
@@ -685,6 +689,7 @@ def main():
             )
         else:
             st.info("該当するデータがありません")
+
 
 
 if __name__ == "__main__":
