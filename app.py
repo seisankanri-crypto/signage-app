@@ -183,6 +183,15 @@ st.markdown(f"""
         .custom-table tr:hover td {{
             background: rgba(2, 136, 209, 0.5);
         }}
+        .compact-table {
+            font-size: 12px;
+        }
+        .compact-table th {
+            padding: 6px 8px;
+        }
+        .compact-table td {
+            padding: 4px 8px;
+        }
     </style>
 
     <!-- ロゴ固定表示 -->
@@ -282,8 +291,10 @@ def show_absence():
         row_class = "row-even" if i % 2 == 0 else "row-odd"
         rows += f'<tr class="{row_class}">{cells}</tr>'
 
+    table_class = "custom-table compact-table" if row_count >= 5 else "custom-table"
+
     st.markdown(f"""
-        <table class="custom-table">
+        <table class="{table_class}">
             <thead><tr>{headers}</tr></thead>
             <tbody>{rows}</tbody>
         </table>
@@ -318,15 +329,19 @@ def show_visitors():
         row_class = "row-even" if i % 2 == 0 else "row-odd"
         rows += f'<tr class="{row_class}">{cells}</tr>'
 
+    row_count = len(df_display)
+    
+    # 5件以上の場合は "compact-table" クラスを追加する
+    table_class = "custom-table compact-table" if row_count >= 5 else "custom-table"
+
     st.markdown(f"""
-        <table class="custom-table">
+        <table class="{table_class}">
             <thead><tr>{headers}</tr></thead>
             <tbody>{rows}</tbody>
         </table>
         <div style="text-align:center; color:#90caf9; font-size:26px; margin-top:16px; font-weight:bold; text-shadow: 0 2px 8px rgba(0,0,0,0.5);">
             どうぞごゆっくりご見学ください 🙏
         </div>
-
     """, unsafe_allow_html=True)
 
 
@@ -433,6 +448,13 @@ def show_news():
 
         items = root.findall(".//item")[:8]
 
+        is_compact = len(items) >= 5
+        padding_style = "6px 12px" if is_compact else "12px 20px"  # 内側の余白
+        margin_style = "3px 0" if is_compact else "6px 0"          # ニュース間のすき間
+        font_size_time = "13px" if is_compact else "15px"          # 時刻の文字サイズ
+        font_size_title = "14px" if is_compact else "17px"         # タイトルの文字サイズ
+        # ▲▲▲ ここまで ▲▲▲
+
         news_html = ""
         for i, item in enumerate(items):
             title = item.find("title").text or ""
@@ -447,13 +469,14 @@ def show_news():
 
             row_class = "rgba(21, 101, 192, 0.3)" if i % 2 == 0 else "rgba(2, 136, 209, 0.15)"
 
+            # ▼▼▼ 変数を使ってスタイルを動的に適用するよう変更 ▼▼▼
             news_html += f"""
                 <div style="
                     background: {row_class};
                     border-left: 4px solid #0288d1;
                     border-radius: 8px;
-                    padding: 12px 20px;
-                    margin: 6px 0;
+                    padding: {padding_style};
+                    margin: {margin_style};
                     color: white;
                     display: flex;
                     align-items: center;
@@ -462,13 +485,14 @@ def show_news():
                 ">
                     <span style="
                         color: #90caf9;
-                        font-size: 15px;
+                        font-size: {font_size_time};
                         font-weight: bold;
                         min-width: 45px;
                     ">{time_str}</span>
-                    <span style="font-size: 17px;">📌 {title}</span>
+                    <span style="font-size: {font_size_title};">📌 {title}</span>
                 </div>
             """
+            # ▲▲▲ ここまで ▲▲▲
 
         st.markdown(news_html, unsafe_allow_html=True)
 
