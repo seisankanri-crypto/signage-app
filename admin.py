@@ -72,7 +72,16 @@ def get_gspread_client():
 def get_sheet(sheet_name):
     client = get_gspread_client()
     spreadsheet = client.open_by_key(SPREADSHEET_ID)
-    return spreadsheet.worksheet(sheet_name)
+    try:
+        return spreadsheet.worksheet(sheet_name)
+    except gspread.exceptions.WorksheetNotFound:
+        # シートが無い場合は作成してヘッダーをセット
+        ws = spreadsheet.add_worksheet(title=sheet_name, rows=100, cols=20)
+        if sheet_name == "イベント一覧":
+            ws.append_row(["イベントID", "イベント名", "受付状況", "質問内容", "選択肢1", "選択肢2", "選択肢3"])
+        elif sheet_name == "イベント回答":
+            ws.append_row(["イベントID", "イベント名", "氏名", "回答", "コメント", "回答日時"])
+        return ws
 
 def get_sheet_data(sheet_name):
     try:
@@ -91,6 +100,26 @@ def delete_row(sheet_name, row_index):
     except Exception as e:
         st.error(f"削除エラー: {e}")
         return False
+
+# イベントID自動採番ロジック
+def generate_event_id():
+    df_events = get_sheet_data("イベント一覧")
+    if df_events.empty or "イベントID" not in df_events.columns:
+        return "EV01"
+    
+    ids = df_events["イベントID"].dropna().astype(str).tolist()
+    num_list = []
+    for eid in ids:
+        if eid.startswith("EV"):
+            try:
+                num_list.append(int(eid.replace("EV", "")))
+            except ValueError:
+                pass
+    if not num_list:
+        return "EV01"
+    
+    max_num = max(num_list)
+    return f"EV{max_num + 1:02d}"
 
 # ==========================================
 # ログイン画面
@@ -141,7 +170,7 @@ def main():
 
     menu = st.sidebar.selectbox(
         "メニューを選択",
-        ["🏥 欠勤登録", "🤝 来客登録", "📢 お知らせ登録", "📊 勤怠一覧", "🆘 安否確認一覧"]
+        ["🏥 欠勤登録", "🤝 来客登録", "📢 お知らせ登録", "🎉 イベント管理", "📊 勤怠一覧", "🆘 安否確認一覧"]
     )
 
     # ==========================================
@@ -394,6 +423,184 @@ def main():
             st.info("登録済みのお知らせはありません")
 
     # ==========================================
+    # 🎉 イベント管理（新追加）
+    # ==========================================
+    elif menu == "🎉 イベント管理":
+        st.header("🎉 イベント出欠・希望確認 管理")
+
+        tab_create, tab_list, tab_answers = st.tabs([
+            "➕ イベント新規作成",
+            "📋 イベント一覧・受付切り替え",
+            "📊 回答結果の確認"
+        ])
+
+        # --- タブ1: イベント新規作成 ---
+        with tab_create:
+            st.subheader("新しいイベントを作成する")
+            auto_id = generate_event_id()
+            st.info(f"🔑 発行されるイベントID: **{auto_id}** （自動採番）")
+
+            with st.form("create_event_form"):
+                event_name = st.text_input("イベント名", placeholder="例：忘年会出欠確認")
+                question = st.text_area("質問内容（LINEで送信される本文）", placeholder="例：12/20(金)の忘年会に参加できますか？")
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    opt1 = st.text_input("選択肢 1", placeholder="例：参加")
+                with col2:
+                    opt2 = st.text_input("選択肢 2", placeholder="例：不参加")
+                with col3:
+                    opt3 = st.text_input("選択肢 3（任意）", placeholder="例：検討中")
+
+                status = st.selectbox("受付状況", ["受付中", "受付終了"])
+
+                submitted = st.form_submit_button("🚀 イベントを作成する", use_container_width=True)
+
+                if submitted:
+                    if not event_name or not question or not opt1 or not opt2:
+                        st.error("「イベント名」「質問内容」「選択肢1」「選択肢2」は必須です。")
+                    else:
+                        try:
+                            sheet = get_sheet("イベント一覧")
+                            sheet.append_row([
+                                auto_id,
+                                event_name,
+                                status,
+                                question,
+                                opt1,
+                                opt2,
+                                opt3 if opt3 else ""
+                            ])
+                            st.success(f"✅ イベント「{event_name}」（ID: {auto_id}）を作成しました！")
+                            st.cache_resource.clear()
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"作成エラー: {e}")
+
+        # --- タブ2: イベント一覧・ステータス変更 ---
+        with tab_list:
+            st.subheader("登録済みイベント一覧")
+            df_events = get_sheet_data("イベント一覧")
+
+            if not df_events.empty and "イベントID" in df_events.columns:
+                df_events_reset = df_events.copy()
+                df_events_reset.reset_index(drop=False, inplace=True)
+
+                for _, row in df_events_reset.iterrows():
+                    status_badge = "🟢 受付中" if row.get("受付状況") == "受付中" else "🔴 受付終了"
+                    
+                    with st.expander(f"{status_badge} | 【{row.get('イベントID')}】{row.get('イベント名')}"):
+                        st.write(f"**質問内容:** {row.get('質問内容')}")
+                        st.write(f"**選択肢:** 1. {row.get('選択肢1')} / 2. {row.get('選択肢2')}" + (f" / 3. {row.get('選択肢3')}" if row.get('選択肢3') else ""))
+
+                        col1, col2, col3 = st.columns([2, 2, 1])
+                        
+                        with col1:
+                            # ステータス切り替えボタン
+                            new_status = "受付終了" if row.get("受付状況") == "受付中" else "受付中"
+                            if st.button(f"⚙️ ステータスを「{new_status}」に変更", key=f"status_btn_{row['index']}"):
+                                try:
+                                    sheet = get_sheet("イベント一覧")
+                                    # 行番号は index + 2 (ヘッダー含む)
+                                    sheet.update_cell(row['index'] + 2, 3, new_status)
+                                    st.success(f"ステータスを「{new_status}」に変更しました！")
+                                    st.cache_resource.clear()
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"更新エラー: {e}")
+
+                        with col3:
+                            if st.button("🗑️ イベント削除", key=f"del_event_{row['index']}"):
+                                if delete_row("イベント一覧", row["index"]):
+                                    st.success("イベントを削除しました！")
+                                    st.cache_resource.clear()
+                                    st.rerun()
+            else:
+                st.info("登録されているイベントはありません。")
+
+        # --- タブ3: 回答結果の確認 ---
+        with tab_answers:
+            st.subheader("📊 LINEでの回答結果")
+            df_answers = get_sheet_data("イベント回答")
+
+            if not df_answers.empty and "イベント名" in df_answers.columns:
+                event_list = sorted(df_answers["イベント名"].dropna().unique().tolist())
+                selected_event = st.selectbox("確認したいイベントを選択", event_list)
+
+                df_filtered = df_answers[df_answers["イベント名"] == selected_event].copy()
+
+                if not df_filtered.empty:
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.metric("総回答数", f"{len(df_filtered)} 件")
+                    
+                    st.divider()
+
+                    # 集計結果
+                    st.markdown("#### 📈 回答の集計")
+                    summary = df_filtered["回答"].value_counts().reset_index()
+                    summary.columns = ["回答", "人数"]
+                    st.dataframe(summary, use_container_width=True)
+
+                    st.markdown("#### 📋 回答明細一覧")
+                    display_cols = [c for c in ["氏名", "回答", "コメント", "回答日時"] if c in df_filtered.columns]
+                    st.dataframe(df_filtered[display_cols], use_container_width=True)
+
+                    # Excelダウンロード
+                    def create_event_excel(df, event_title):
+                        wb = openpyxl.Workbook()
+                        ws = wb.active
+                        ws.title = "回答一覧"
+
+                        ws.merge_cells("A1:D1")
+                        title_cell = ws["A1"]
+                        title_cell.value = f"回答結果：{event_title}"
+                        title_cell.font = Font(bold=True, size=14, color="FFFFFF")
+                        title_cell.fill = PatternFill("solid", fgColor="2E7D32")
+                        title_cell.alignment = Alignment(horizontal="center", vertical="center")
+                        ws.row_dimensions[1].height = 30
+
+                        headers = list(df.columns)
+                        header_fill = PatternFill("solid", fgColor="4CAF50")
+                        thin = Side(style="thin", color="CCCCCC")
+                        border = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+                        for col_idx, header in enumerate(headers, 1):
+                            cell = ws.cell(row=2, column=col_idx, value=header)
+                            cell.font = Font(bold=True, color="FFFFFF", size=11)
+                            cell.fill = header_fill
+                            cell.alignment = Alignment(horizontal="center", vertical="center")
+                            cell.border = border
+                        ws.row_dimensions[2].height = 22
+
+                        for row_idx, row in df.iterrows():
+                            for col_idx, value in enumerate(row.values, 1):
+                                cell = ws.cell(row=row_idx + 3, column=col_idx, value=str(value))
+                                cell.alignment = Alignment(horizontal="center", vertical="center")
+                                cell.border = border
+                                if row_idx % 2 == 0:
+                                    cell.fill = PatternFill("solid", fgColor="E8F5E9")
+                            ws.row_dimensions[row_idx + 3].height = 20
+
+                        output = BytesIO()
+                        wb.save(output)
+                        output.seek(0)
+                        return output
+
+                    excel_data = create_event_excel(df_filtered[display_cols], selected_event)
+                    st.download_button(
+                        label="📥 回答結果をExcelでダウンロード",
+                        data=excel_data,
+                        file_name=f"イベント回答_{selected_event}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True
+                    )
+                else:
+                    st.info("このイベントの回答はまだありません。")
+            else:
+                st.info("まだLINEからのイベント回答データがありません。")
+
+    # ==========================================
     # 勤怠一覧
     # ==========================================
     elif menu == "📊 勤怠一覧":
@@ -452,7 +659,7 @@ def main():
 
                 ws.merge_cells("A1:H1")
                 title_cell = ws["A1"]
-                title_cell.value = f"勤怠一覧　{start_date.strftime('%Y/%m/%d')} ～ {end_date.strftime('%Y/%m/%d')}"
+                title_cell.value = f"勤怠一覧 {start_date.strftime('%Y/%m/%d')} ～ {end_date.strftime('%Y/%m/%d')}"
                 title_cell.font = Font(bold=True, size=14, color="FFFFFF")
                 title_cell.fill = PatternFill("solid", fgColor="1565C0")
                 title_cell.alignment = Alignment(horizontal="center", vertical="center")
@@ -625,7 +832,7 @@ def main():
                 ws.merge_cells("A1:C1")
                 title_cell = ws["A1"]
                 title_cell.value = (
-                    f"安否確認一覧　"
+                    f"安否確認一覧 "
                     f"{start_date.strftime('%Y/%m/%d')} ～ "
                     f"{end_date.strftime('%Y/%m/%d')}"
                 )
@@ -689,7 +896,6 @@ def main():
             )
         else:
             st.info("該当するデータがありません")
-
 
 
 if __name__ == "__main__":
