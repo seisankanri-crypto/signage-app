@@ -152,7 +152,7 @@ def main():
 
         absence_type = st.selectbox(
             "種別",
-            ["欠勤", "有給休暇", "振替休暇", "遅刻", "早退", "私用外出"]
+            ["欠勤", "有給休暇", "振替休暇", "休業", "遅刻", "早退", "私用外出"]
         )
 
         with st.form("absence_form"):
@@ -163,7 +163,7 @@ def main():
                 department = st.text_input("部署", placeholder="例：製造部")
 
             with col2:
-                if absence_type in ["欠勤", "有給休暇", "振替休暇"]:
+                if absence_type in ["欠勤", "有給休暇", "振替休暇", "休業"]:
                     start_date = st.date_input("開始日", value=datetime.now(JST).date())
                     end_date = st.date_input("終了日", value=datetime.now(JST).date())
                     start_time = None
@@ -190,7 +190,7 @@ def main():
             if submitted:
                 if not name or not department:
                     st.error("氏名と部署を入力してください")
-                elif absence_type in ["欠勤", "有給休暇", "振替休暇"] and start_date > end_date:
+                elif absence_type in ["欠勤", "有給休暇", "振替休暇", "休業"] and start_date > end_date:
                     st.error("終了日は開始日以降にしてください")
                 else:
                     try:
@@ -203,7 +203,7 @@ def main():
                             date_list.append(current)
                             current += timedelta(days=1)
 
-                        if absence_type in ["欠勤", "有給休暇", "振替休暇"]:
+                        if absence_type in ["欠勤", "有給休暇", "振替休暇", "休業"]:
                             start_time_str = "8:30"
                             end_time_str = "17:30"
                         else:
