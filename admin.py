@@ -75,7 +75,6 @@ def get_sheet(sheet_name):
     try:
         return spreadsheet.worksheet(sheet_name)
     except gspread.exceptions.WorksheetNotFound:
-        # シートが無い場合は作成してヘッダーをセット
         ws = spreadsheet.add_worksheet(title=sheet_name, rows=100, cols=20)
         if sheet_name == "イベント一覧":
             ws.append_row(["イベントID", "イベント名", "受付状況", "質問内容", "選択肢1", "選択肢2", "選択肢3"])
@@ -87,7 +86,11 @@ def get_sheet_data(sheet_name):
     try:
         sheet = get_sheet(sheet_name)
         data = sheet.get_all_records()
-        return pd.DataFrame(data)
+        df = pd.DataFrame(data)
+        # 列名の空白を綺麗にする
+        if not df.empty:
+            df.columns = df.columns.astype(str).str.strip()
+        return df
     except Exception as e:
         st.error(f"読み込みエラー: {e}")
         return pd.DataFrame()
@@ -423,7 +426,7 @@ def main():
             st.info("登録済みのお知らせはありません")
 
     # ==========================================
-    # 🎉 イベント管理（新追加）
+    # 🎉 イベント管理
     # ==========================================
     elif menu == "🎉 イベント管理":
         st.header("🎉 イベント出欠・希望確認 管理")
@@ -496,12 +499,10 @@ def main():
                         col1, col2, col3 = st.columns([2, 2, 1])
                         
                         with col1:
-                            # ステータス切り替えボタン
                             new_status = "受付終了" if row.get("受付状況") == "受付中" else "受付中"
                             if st.button(f"⚙️ ステータスを「{new_status}」に変更", key=f"status_btn_{row['index']}"):
                                 try:
                                     sheet = get_sheet("イベント一覧")
-                                    # 行番号は index + 2 (ヘッダー含む)
                                     sheet.update_cell(row['index'] + 2, 3, new_status)
                                     st.success(f"ステータスを「{new_status}」に変更しました！")
                                     st.cache_resource.clear()
@@ -521,84 +522,149 @@ def main():
         # --- タブ3: 回答結果の確認 ---
         with tab_answers:
             st.subheader("📊 LINEでの回答結果")
+            
+            df_events = get_sheet_data("イベント一覧")
             df_answers = get_sheet_data("イベント回答")
 
-            if not df_answers.empty and "イベント名" in df_answers.columns:
-                event_list = sorted(df_answers["イベント名"].dropna().unique().tolist())
-                selected_event = st.selectbox("確認したいイベントを選択", event_list)
+            # イベントの選択肢候補を構築（イベント一覧シート優先）
+            event_options = []
+            if not df_events.empty and "イベント名" in df_events.columns:
+                event_options = df_events["イベント名"].dropna().astype(str).str.strip().unique().tolist()
+            elif not df_answers.empty and "イベント名" in df_answers.columns:
+                event_options = df_answers["イベント名"].dropna().astype(str).str.strip().unique().tolist()
 
-                df_filtered = df_answers[df_answers["イベント名"] == selected_event].copy()
+            if event_options:
+                selected_event = st.selectbox("確認したいイベントを選択", event_options)
+
+                # 対象イベントの回答抽出（文字空白のブレを正規化してマッチング）
+                if not df_answers.empty and "イベント名" in df_answers.columns:
+                    df_filtered = df_answers[
+                        df_answers["イベント名"].astype(str).str.strip() == str(selected_event).strip()
+                    ].copy()
+                else:
+                    df_filtered = pd.DataFrame()
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("総回答数", f"{len(df_filtered)} 件")
 
                 if not df_filtered.empty:
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.metric("総回答数", f"{len(df_filtered)} 件")
-                    
                     st.divider()
 
-                    # 集計結果
+                    # 1. 回答の集計（集計表 ＆ 棒グラフ）
                     st.markdown("#### 📈 回答の集計")
-                    summary = df_filtered["回答"].value_counts().reset_index()
-                    summary.columns = ["回答", "人数"]
-                    st.dataframe(summary, use_container_width=True)
+                    if "回答" in df_filtered.columns:
+                        summary = df_filtered["回答"].astype(str).value_counts().reset_index()
+                        summary.columns = ["回答内容", "人数"]
+                        
+                        col_sum1, col_sum2 = st.columns([1, 2])
+                        with col_sum1:
+                            st.dataframe(summary, use_container_width=True)
+                        with col_sum2:
+                            st.bar_chart(data=summary.set_index("回答内容"))
 
+                    # 2. 回答明細一覧
                     st.markdown("#### 📋 回答明細一覧")
                     display_cols = [c for c in ["氏名", "回答", "コメント", "回答日時"] if c in df_filtered.columns]
-                    st.dataframe(df_filtered[display_cols], use_container_width=True)
+                    df_display = df_filtered[display_cols].reset_index(drop=True)
+                    st.dataframe(df_display, use_container_width=True)
 
-                    # Excelダウンロード
-                    def create_event_excel(df, event_title):
+                    # 3. Excelダウンロード（集計サマリー ＋ 明細一覧のセット）
+                    def create_event_excel_advanced(df_sum, df_det, event_title):
                         wb = openpyxl.Workbook()
                         ws = wb.active
-                        ws.title = "回答一覧"
+                        ws.title = "出欠回答集計"
 
+                        # タイトルヘッダー
                         ws.merge_cells("A1:D1")
                         title_cell = ws["A1"]
-                        title_cell.value = f"回答結果：{event_title}"
+                        title_cell.value = f"【回答結果集計】{event_title}"
                         title_cell.font = Font(bold=True, size=14, color="FFFFFF")
                         title_cell.fill = PatternFill("solid", fgColor="2E7D32")
                         title_cell.alignment = Alignment(horizontal="center", vertical="center")
                         ws.row_dimensions[1].height = 30
 
-                        headers = list(df.columns)
-                        header_fill = PatternFill("solid", fgColor="4CAF50")
+                        # 集計サマリー部
+                        ws.cell(row=3, column=1, value="■ 集計サマリー").font = Font(bold=True, size=11, color="1B5E20")
+                        
+                        header_fill_sum = PatternFill("solid", fgColor="81C784")
                         thin = Side(style="thin", color="CCCCCC")
                         border = Border(left=thin, right=thin, top=thin, bottom=thin)
 
-                        for col_idx, header in enumerate(headers, 1):
-                            cell = ws.cell(row=2, column=col_idx, value=header)
+                        ws.cell(row=4, column=1, value="回答内容").font = Font(bold=True, color="FFFFFF")
+                        ws.cell(row=4, column=1).fill = header_fill_sum
+                        ws.cell(row=4, column=1).border = border
+                        ws.cell(row=4, column=2, value="人数").font = Font(bold=True, color="FFFFFF")
+                        ws.cell(row=4, column=2).fill = header_fill_sum
+                        ws.cell(row=4, column=2).border = border
+
+                        curr_r = 5
+                        for _, r in df_sum.iterrows():
+                            c1 = ws.cell(row=curr_r, column=1, value=str(r.iloc[0]))
+                            c2 = ws.cell(row=curr_r, column=2, value=int(r.iloc[1]))
+                            c1.border = border
+                            c2.border = border
+                            c1.alignment = Alignment(horizontal="left")
+                            c2.alignment = Alignment(horizontal="center")
+                            curr_r += 1
+
+                        # 合計行
+                        c_tot1 = ws.cell(row=curr_r, column=1, value="合計")
+                        c_tot2 = ws.cell(row=curr_r, column=2, value=len(df_det))
+                        c_tot1.font = Font(bold=True)
+                        c_tot2.font = Font(bold=True)
+                        c_tot1.border = border
+                        c_tot2.border = border
+                        c_tot1.alignment = Alignment(horizontal="left")
+                        c_tot2.alignment = Alignment(horizontal="center")
+
+                        # 回答明細部
+                        curr_r += 3
+                        ws.cell(row=curr_r, column=1, value="■ 回答明細一覧").font = Font(bold=True, size=11, color="1B5E20")
+                        curr_r += 1
+
+                        headers_det = list(df_det.columns)
+                        header_fill_det = PatternFill("solid", fgColor="4CAF50")
+
+                        for c_idx, h in enumerate(headers_det, 1):
+                            cell = ws.cell(row=curr_r, column=c_idx, value=h)
                             cell.font = Font(bold=True, color="FFFFFF", size=11)
-                            cell.fill = header_fill
+                            cell.fill = header_fill_det
                             cell.alignment = Alignment(horizontal="center", vertical="center")
                             cell.border = border
-                        ws.row_dimensions[2].height = 22
+                        ws.row_dimensions[curr_r].height = 22
 
-                        for row_idx, row in df.iterrows():
-                            for col_idx, value in enumerate(row.values, 1):
-                                cell = ws.cell(row=row_idx + 3, column=col_idx, value=str(value))
-                                cell.alignment = Alignment(horizontal="center", vertical="center")
+                        for r_idx, row_data in df_det.iterrows():
+                            curr_r += 1
+                            for c_idx, val in enumerate(row_data.values, 1):
+                                cell = ws.cell(row=curr_r, column=c_idx, value=str(val) if val is not None else "")
+                                cell.alignment = Alignment(horizontal="center" if c_idx != 3 else "left", vertical="center")
                                 cell.border = border
-                                if row_idx % 2 == 0:
+                                if r_idx % 2 == 0:
                                     cell.fill = PatternFill("solid", fgColor="E8F5E9")
-                            ws.row_dimensions[row_idx + 3].height = 20
+                            ws.row_dimensions[curr_r].height = 20
+
+                        col_widths = {"氏名": 16, "回答": 14, "コメント": 30, "回答日時": 18}
+                        for c_idx, h in enumerate(headers_det, 1):
+                            ws.column_dimensions[openpyxl.utils.get_column_letter(c_idx)].width = col_widths.get(h, 16)
 
                         output = BytesIO()
                         wb.save(output)
                         output.seek(0)
                         return output
 
-                    excel_data = create_event_excel(df_filtered[display_cols], selected_event)
+                    excel_data = create_event_excel_advanced(summary, df_display, selected_event)
                     st.download_button(
-                        label="📥 回答結果をExcelでダウンロード",
+                        label="📥 出欠集計結果（Excel）をダウンロード",
                         data=excel_data,
-                        file_name=f"イベント回答_{selected_event}.xlsx",
+                        file_name=f"出欠集計_{selected_event}_{datetime.now(JST).strftime('%Y%m%d')}.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         use_container_width=True
                     )
                 else:
-                    st.info("このイベントの回答はまだありません。")
+                    st.info("💡 このイベントの回答データはまだ登録されていません。")
             else:
-                st.info("まだLINEからのイベント回答データがありません。")
+                st.info("💡 登録されているイベント、または回答データが見つかりません。")
 
     # ==========================================
     # 勤怠一覧
@@ -726,7 +792,6 @@ def main():
     elif menu == "🆘 安否確認一覧":
         st.header("🆘 安否確認一覧")
 
-        # 日付フィルター
         col1, col2 = st.columns(2)
         with col1:
             start_date = st.date_input(
@@ -743,15 +808,12 @@ def main():
             st.error("終了日は開始日以降にしてください")
             return
 
-        # データ取得
         df = get_sheet_data("安否確認")
 
         if df.empty:
             st.info("安否確認のデータがありません")
             return
 
-        # 日付フィルター
-        # 列名は「日時」！！
         if "日時" in df.columns:
             df["日付_正規化"] = df["日時"].apply(
                 lambda x: normalize_date(str(x).split(" ")[0]) if x else ""
@@ -765,12 +827,10 @@ def main():
         else:
             df_filtered = df.copy()
 
-        # 件数表示
         total = len(df_filtered)
         safe = len(df_filtered[df_filtered["ステータス"] == "無事です"]) \
             if "ステータス" in df_filtered.columns else total
 
-        # サマリーカード
         col1, col2 = st.columns(2)
         with col1:
             st.metric(label="✅ 回答件数", value=f"{total} 件")
@@ -779,12 +839,9 @@ def main():
 
         st.divider()
 
-        # 一覧表示
         st.subheader(f"📋 回答一覧（{total}件）")
 
         if not df_filtered.empty:
-            # 表示列を選択
-            # 列名は「日時」「LINE表示名」「ステータス」！！
             display_cols = []
             for col in ["日時", "LINE表示名", "ステータス"]:
                 if col in df_filtered.columns:
@@ -792,13 +849,11 @@ def main():
 
             df_display = df_filtered[display_cols].copy()
 
-            # 日時で降順ソート
             if "日時" in df_display.columns:
                 df_display = df_display.sort_values(
                     "日時", ascending=False
                 ).reset_index(drop=True)
 
-            # カード表示
             df_filtered_reset = df_filtered.copy()
             df_filtered_reset.reset_index(drop=False, inplace=True)
 
@@ -807,7 +862,6 @@ def main():
                 with col1:
                     status = row.get("ステータス", "無事です")
                     icon = "✅" if status == "無事です" else "⚠️"
-                    # LINE表示名を使う！！
                     st.success(
                         f"{icon} {row.get('LINE表示名', '')} / "
                         f"{status} / "
@@ -822,13 +876,11 @@ def main():
 
             st.divider()
 
-            # Excelダウンロード
             def create_anpi_excel(df):
                 wb = openpyxl.Workbook()
                 ws = wb.active
                 ws.title = "安否確認一覧"
 
-                # タイトル
                 ws.merge_cells("A1:C1")
                 title_cell = ws["A1"]
                 title_cell.value = (
@@ -841,7 +893,6 @@ def main():
                 title_cell.alignment = Alignment(horizontal="center", vertical="center")
                 ws.row_dimensions[1].height = 30
 
-                # ヘッダー
                 headers = list(df.columns)
                 header_fill = PatternFill("solid", fgColor="EF5350")
                 thin = Side(style="thin", color="CCCCCC")
@@ -855,7 +906,6 @@ def main():
                     cell.border = border
                 ws.row_dimensions[2].height = 22
 
-                # データ
                 for row_idx, row in df.iterrows():
                     for col_idx, value in enumerate(row.values, 1):
                         cell = ws.cell(row=row_idx + 3, column=col_idx, value=value)
@@ -865,7 +915,6 @@ def main():
                             cell.fill = PatternFill("solid", fgColor="FFEBEE")
                     ws.row_dimensions[row_idx + 3].height = 20
 
-                # 列幅
                 column_widths = {
                     "日時": 20,
                     "LINE表示名": 16,
